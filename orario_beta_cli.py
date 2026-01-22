@@ -10,8 +10,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 
 
 
-BOT_TOKEN = "******"
-URL_INDICE = "******"
+
 HEADER = {"User-Agent": "Mozilla/5.0 (OrarioBot/1.0)"}
 
 GIORNI = ["LUN", "MAR", "MER", "GIO", "VEN", "SAB"]
