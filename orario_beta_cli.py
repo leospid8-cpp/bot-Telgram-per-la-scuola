@@ -3,12 +3,13 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from datetime import datetime
-
+import os
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
-
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+URL_INDICE = os.environ.get("URL_INDICE")
 
 
 HEADER = {"User-Agent": "Mozilla/5.0 (OrarioBot/1.0)"}
