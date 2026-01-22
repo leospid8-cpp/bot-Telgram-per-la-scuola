@@ -2,31 +2,33 @@ import re
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+from datetime import datetime
 
-URL_INDICE = "**********"
-HEADER = {"User-Agent": "Mozilla/5.0 (OrarioCLI/1.0)"}
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+
+
+
+BOT_TOKEN = "******"
+URL_INDICE = "******"
+HEADER = {"User-Agent": "Mozilla/5.0 (OrarioBot/1.0)"}
 
 GIORNI = ["LUN", "MAR", "MER", "GIO", "VEN", "SAB"]
-MAPPA_GIORNI = {
-    "lun": "LUN", "lunedi": "LUN", "lunedì": "LUN",
-    "mar": "MAR", "martedi": "MAR", "martedì": "MAR",
-    "mer": "MER", "mercoledi": "MER", "mercoledì": "MER",
-    "gio": "GIO", "giovedi": "GIO", "giovedì": "GIO",
-    "ven": "VEN", "venerdi": "VEN", "venerdì": "VEN",
-    "sab": "SAB", "sabato": "SAB",
-}
+
+# Cache in memoria per non riscaricare l'indice ogni volta
+CACHE_INDICE = {"ts": None, "data": None}
+
 
 def pulisci(t: str) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 def scarica_html(url: str) -> BeautifulSoup:
-    #scarico la pagina dal sito
     r = requests.get(url, headers=HEADER, timeout=25)
     r.raise_for_status()
     return BeautifulSoup(r.text, "lxml")
 
 def crea_indice():
-    #costruisco l'elenco di classi/docenti/aule partendo dall'indice
     pagina = scarica_html(URL_INDICE)
     indice = {"classe": {}, "prof": {}, "aula": {}}
 
@@ -46,8 +48,25 @@ def crea_indice():
 
     return indice
 
+def get_indice_cached(max_age_seconds=6 * 60 * 60):
+    now = datetime.now().timestamp()
+    if CACHE_INDICE["data"] and CACHE_INDICE["ts"] and (now - CACHE_INDICE["ts"] < max_age_seconds):
+        return CACHE_INDICE["data"]
+
+    indice = crea_indice()
+    CACHE_INDICE["data"] = indice
+    CACHE_INDICE["ts"] = now
+    return indice
+
+def categoriaricerca(nome: str, indice: dict) -> str:
+    nome = nome.upper().strip()
+    for categoria in ("classe", "prof", "aula"):
+        for chiave in indice[categoria]:
+            if nome in chiave:
+                return categoria
+    return "classe"
+
 def scegli_url(elenco: dict, chiave: str):
-    #seleziono la voce giusta (anche con ricerca parziale)
     chiave = chiave.upper().strip()
     if chiave in elenco:
         return elenco[chiave]
@@ -56,15 +75,59 @@ def scegli_url(elenco: dict, chiave: str):
     if len(trovati) == 1:
         return elenco[trovati[0]]
 
-    if len(trovati) > 1:
-        print("\nHo trovato più risultati:")
-        for i, k in enumerate(trovati, 1):
-            print(f"  {i}) {k}")
-        s = input("Scegli numero: ").strip()
-        if s.isdigit() and 1 <= int(s) <= len(trovati):
-            return elenco[trovati[int(s) - 1]]
+    # su Telegram non facciamo menu interattivo: se ci sono più risultati, li elenchiamo
+    return None, trovati
 
-    return None
+async def testo_libero(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    testo = (update.message.text or "").strip()
+    if not testo:
+        return
+
+    # opzionale: ignora messaggi troppo lunghi
+    if len(testo) > 60:
+        await update.message.reply_text("Scrivi solo classe/prof/aula, es: 4F oppure ROSSI oppure AULA 69.")
+        return
+
+    nome = testo  # qui la "chiave" è direttamente il messaggio
+
+    giorno = giorno_oggi_sigla()
+    if giorno is None:
+        await update.message.reply_text("Oggi è domenica: non c’è orario.")
+        return
+
+    ora = ora_corrente_numero()
+    if ora is None:
+        await update.message.reply_text("Fuori fascia orario lezioni (07:00–13:25).")
+        return
+
+    try:
+        indice = get_indice_cached()
+        categoria = categoriaricerca(nome, indice)
+
+        res = scegli_url(indice[categoria], nome)
+
+        # nel tuo codice scegli_url può restituire (None, trovati)
+        if isinstance(res, tuple):
+            url, trovati = res
+        else:
+            url, trovati = res, []
+
+        if not url:
+            if trovati:
+                await update.message.reply_text(
+                    "Ho trovato più risultati, sii più preciso:\n" + "\n".join(trovati[:30])
+                )
+            else:
+                await update.message.reply_text("Non trovato. Scrivi un nome più simile a quello sul sito.")
+            return
+
+        orari, griglia = carica_orario(url)
+        msg = formatta_slot(orari, griglia, giorno, ora)
+        await update.message.reply_text(msg)
+
+    except Exception as e:
+        await update.message.reply_text(f"Errore: {e}")
+
 
 def leggi_cella(td):
     testi = [pulisci(p.get_text(" ", strip=True)) for p in td.find_all("p")]
@@ -74,9 +137,12 @@ def leggi_cella(td):
     for a in td.find_all("a", href=True):
         txt = pulisci(a.get_text(" ", strip=True)).upper()
         href = a["href"]
-        if "Classi/" in href: classi.append(txt)
-        elif "Docenti/" in href: prof.append(txt)
-        elif "Aule/" in href: aule.append(txt)
+        if "Classi/" in href:
+            classi.append(txt)
+        elif "Docenti/" in href:
+            prof.append(txt)
+        elif "Aule/" in href:
+            aule.append(txt)
 
     return {
         "testo": testi,
@@ -86,7 +152,6 @@ def leggi_cella(td):
     }
 
 def carica_orario(url: str):
-    #leggo la tabella e gestisco anche le celle doppie (rowspan)
     pagina = scarica_html(url)
     tabella = pagina.find("table", attrs={"border": "2"})
     if not tabella:
@@ -94,7 +159,7 @@ def carica_orario(url: str):
 
     righe = tabella.find_all("tr")
     orari, griglia = [], {}
-    trascina = [(0, None) for _ in GIORNI]  
+    trascina = [(0, None) for _ in GIORNI]
 
     ora = 0
     for r in righe[1:]:
@@ -137,51 +202,125 @@ def carica_orario(url: str):
 
     return orari, griglia
 
-def stampa_slot(orari, griglia, giorno, ora):
+def giorno_oggi_sigla():
+    i = datetime.now().weekday()
+    # 0=Lun ... 5=Sab ... 6=Dom
+    if i >= 6:
+        return None
+    return GIORNI[i]
+
+def ora_corrente_numero():
+    hhmm = datetime.now().strftime("%H:%M")
+    if "07:00" <= hhmm < "08:45":
+        return 1
+    elif "08:45" <= hhmm < "09:40":
+        return 2
+    elif "09:40" <= hhmm < "10:35":
+        return 3
+    elif "10:35" <= hhmm < "11:35":
+        return 4
+    elif "11:35" <= hhmm < "12:30":
+        return 5
+    elif "12:30" <= hhmm < "13:25":
+        return 6
+    return None
+
+def formatta_slot(orari, griglia, giorno, ora):
     inizio = orari[ora - 1] if 1 <= ora <= len(orari) else "?"
     slot = griglia.get((giorno, ora))
-    print(f"\n{giorno} ora {ora} (inizio {inizio})")
+
+    titolo = f"{giorno} — ora {ora} (inizio {inizio})"
 
     if not slot or (not slot["testo"] and not slot["prof"] and not slot["aule"] and not slot["classi"]):
-        print("  — libero / vuoto —")
+        return titolo + "\n— libero / vuoto —"
+
+    righe = [titolo]
+    if slot["aule"]:
+        righe.append("Aula: " + ", ".join(slot["aule"]))
+    if slot["prof"]:
+        righe.append("Prof: " + ", ".join(slot["prof"]))
+    if slot["classi"]:
+        righe.append("Classe: " + ", ".join(slot["classi"]))
+    if slot["testo"]:
+        righe.append("Info: " + " | ".join(slot["testo"]))
+
+    return "\n".join(righe)
+
+# =========================
+# HANDLER TELEGRAM
+# =========================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Ciao! Sono il bot dell’orario.\n\n"
+        "Usa:\n"
+        "/oggi 4F\n"
+        "/oggi ROSSI\n"
+        "/oggi AULA 69\n\n"
+        "Ti rispondo con la lezione dell’ora attuale."
+    )
+
+async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Comandi:\n"
+        "/oggi <classe|prof|aula>\n"
+        "Esempi: /oggi 4F  — /oggi Burgio — /oggi AULA 69\n"
+    )
+
+async def oggi(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("Scrivi così: /oggi 4F (oppure prof/aula)")
         return
 
-    if slot["aule"]:   print("  Aula  :", ", ".join(slot["aule"]))
-    if slot["prof"]:   print("  Prof  :", ", ".join(slot["prof"]))
-    if slot["classi"]: print("  Classe:", ", ".join(slot["classi"]))
-    if slot["testo"]:  print("  Info  :", " | ".join(slot["testo"]))
+    nome = " ".join(context.args).strip()
+
+    giorno = giorno_oggi_sigla()
+    if giorno is None:
+        await update.message.reply_text("Oggi è domenica: non c’è orario.")
+        return
+
+    ora = ora_corrente_numero()
+    if ora is None:
+        await update.message.reply_text("Fuori fascia orario lezioni (07:00–13:25).")
+        return
+
+    try:
+        indice = get_indice_cached()
+        categoria = categoriaricerca(nome, indice)
+
+        url = None
+        trovati = []
+        res = scegli_url(indice[categoria], nome)
+        if isinstance(res, tuple):
+            url, trovati = res
+        else:
+            url = res
+
+        if not url:
+            if trovati:
+                await update.message.reply_text(
+                    "Ho trovato più risultati, sii più preciso:\n" + "\n".join(trovati[:30])
+                )
+            else:
+                await update.message.reply_text("Non trovato. Scrivi un nome più simile a quello sul sito.")
+            return
+
+        orari, griglia = carica_orario(url)
+        msg = formatta_slot(orari, griglia, giorno, ora)
+        await update.message.reply_text(msg)
+
+    except Exception as e:
+        await update.message.reply_text(f"Errore: {e}")
 
 def main():
-    print("Scarico l'indice dal sito...")
-    indice = crea_indice()
-    print(f"Ok. Classi={len(indice['classe'])}  Prof={len(indice['prof'])}  Aule={len(indice['aula'])}")
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_cmd))
+    app.add_handler(CommandHandler("oggi", oggi))
 
-    categoria = input("\nCategoria (classe/prof/aula): ").strip().lower()
-    if categoria not in ("classe", "prof", "aula"):
-        print("Categoria non valida.")
-        return
+    print("BOT AVVIATO: sto ascoltando Telegram...")
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, testo_libero))
 
-    nome = input(f"Nome {categoria} (es 4F, ROSSI, AULA 69): ").strip()
-    url = scegli_url(indice[categoria], nome)
-    if not url:
-        print("Non trovato. Scrivi un nome più simile a quello sul sito.")
-        return
-
-    print("Scarico l'orario selezionato...")
-    orari, griglia = carica_orario(url)
-
-    g = input("Giorno (lun/mar/mer/gio/ven/sab): ").strip().lower()
-    giorno = MAPPA_GIORNI.get(g, g.upper())
-    if giorno not in GIORNI:
-        print("Giorno non valido.")
-        return
-
-    s_ora = input("Ora (numero, es 4): ").strip()
-    if not s_ora.isdigit():
-        print("Ora non valida.")
-        return
-
-    stampa_slot(orari, griglia, giorno, int(s_ora))
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
