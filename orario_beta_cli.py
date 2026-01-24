@@ -3,6 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import os
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -18,6 +19,7 @@ GIORNI = ["LUN", "MAR", "MER", "GIO", "VEN", "SAB"]
 
 # Cache in memoria per non riscaricare l'indice ogni volta
 CACHE_INDICE = {"ts": None, "data": None}
+TZ = ZoneInfo("Europe/Rome")
 
 
 def pulisci(t: str) -> str:
@@ -49,7 +51,7 @@ def crea_indice():
     return indice
 
 def get_indice_cached(max_age_seconds=6 * 60 * 60):
-    now = datetime.now().timestamp()
+    now = datetime.now(TZ).timestamp()
     if CACHE_INDICE["data"] and CACHE_INDICE["ts"] and (now - CACHE_INDICE["ts"] < max_age_seconds):
         return CACHE_INDICE["data"]
 
@@ -203,14 +205,14 @@ def carica_orario(url: str):
     return orari, griglia
 
 def giorno_oggi_sigla():
-    i = datetime.now().weekday()
+    i = datetime.now(TZ).weekday()
     # 0=Lun ... 5=Sab ... 6=Dom
     if i >= 6:
         return None
     return GIORNI[i]
 
 def ora_corrente_numero():
-    hhmm = datetime.now().strftime("%H:%M")
+    hhmm = datetime.now(TZ).strftime("%H:%M")
     if "07:00" <= hhmm < "08:45":
         return 1
     elif "08:45" <= hhmm < "09:40":
@@ -226,7 +228,7 @@ def ora_corrente_numero():
     return None
 
 def formatta_slot(orari, griglia, giorno, ora):
-    inizio = orari[ora] if 1 <= ora <= len(orari) else "?"
+    inizio = orari[ora - 1] if 1 <= ora <= len(orari) else "?"
     slot = griglia.get((giorno, ora))
 
     titolo = f"{giorno} — ora {ora} (inizio {inizio})"
