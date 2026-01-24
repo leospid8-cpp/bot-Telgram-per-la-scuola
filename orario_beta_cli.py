@@ -243,8 +243,6 @@ def formatta_slot(orari, griglia, giorno, ora):
         righe.append("Prof: " + ", ".join(slot["prof"]))
     if slot["classi"]:
         righe.append("Classe: " + ", ".join(slot["classi"]))
-    if slot["testo"]:
-        righe.append("Info: " + " | ".join(slot["testo"]))
 
     return "\n".join(righe)
 
