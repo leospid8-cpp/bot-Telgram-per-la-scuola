@@ -226,7 +226,7 @@ def ora_corrente_numero():
     return None
 
 def formatta_slot(orari, griglia, giorno, ora):
-    inizio = orari[ora - 1] if 1 <= ora <= len(orari) else "?"
+    inizio = orari[ora] if 1 <= ora <= len(orari) else "?"
     slot = griglia.get((giorno, ora))
 
     titolo = f"{giorno} — ora {ora} (inizio {inizio})"
