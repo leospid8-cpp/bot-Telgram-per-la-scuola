@@ -90,16 +90,20 @@ async def testo_libero(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Scrivi solo classe/prof/aula, es: 4F oppure ROSSI oppure AULA 69.")
         return
 
-    nome = testo  # qui la "chiave" è direttamente il messaggio
+    parole = testo.split()
+    solo_oggi = True
+    if parole and parole[0].lower() == "orario":
+        solo_oggi = False
+        nome = " ".join(parole[1:]).strip()
+        if not nome:
+            await update.message.reply_text("Scrivi cosi: orario 4F (oppure prof/aula)")
+            return
+    else:
+        nome = testo  # qui la "chiave" e direttamente il messaggio
 
     giorno = giorno_oggi_sigla()
     if giorno is None:
-        await update.message.reply_text("Oggi è domenica: non c’è orario.")
-        return
-
-    ora = ora_corrente_numero()
-    if ora is None:
-        await update.message.reply_text("Fuori fascia orario lezioni (07:00–13:25).")
+        await update.message.reply_text("Oggi e domenica: non c'e orario.")
         return
 
     try:
@@ -108,7 +112,7 @@ async def testo_libero(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         res = scegli_url(indice[categoria], nome)
 
-        # nel tuo codice scegli_url può restituire (None, trovati)
+        # nel tuo codice scegli_url puo restituire (None, trovati)
         if isinstance(res, tuple):
             url, trovati = res
         else:
@@ -117,14 +121,21 @@ async def testo_libero(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not url:
             if trovati:
                 await update.message.reply_text(
-                    "Ho trovato più risultati, sii più preciso:\n" + "\n".join(trovati[:30])
+                    "Ho trovato piu risultati, sii piu preciso:\n" + "\n".join(trovati[:30])
                 )
             else:
-                await update.message.reply_text("Non trovato. Scrivi un nome più simile a quello sul sito.")
+                await update.message.reply_text("Non trovato. Scrivi un nome piu simile a quello sul sito.")
             return
 
         orari, griglia = carica_orario(url)
-        msg = formatta_slot(orari, griglia, giorno, ora)
+        if solo_oggi:
+            ora = ora_corrente_numero()
+            if ora is None:
+                await update.message.reply_text("Fuori fascia orario lezioni (07:00-13:25).")
+                return
+            msg = formatta_slot(orari, griglia, giorno, ora)
+        else:
+            msg = formatta_giorno(orari, griglia, giorno)
         await update.message.reply_text(msg)
 
     except Exception as e:
@@ -231,10 +242,10 @@ def formatta_slot(orari, griglia, giorno, ora):
     inizio = orari[ora - 1] if 1 <= ora <= len(orari) else "?"
     slot = griglia.get((giorno, ora))
 
-    titolo = f"{giorno} — ora {ora} (inizio {inizio})"
+    titolo = f"{giorno} - ora {ora} (inizio {inizio})"
 
     if not slot or (not slot["testo"] and not slot["prof"] and not slot["aule"] and not slot["classi"]):
-        return titolo + "\n— libero / vuoto —"
+        return titolo + "\n- libero / vuoto -"
 
     righe = [titolo]
     if slot["aule"]:
@@ -246,41 +257,64 @@ def formatta_slot(orari, griglia, giorno, ora):
 
     return "\n".join(righe)
 
+
+def formatta_giorno(orari, griglia, giorno):
+    righe = [f"{giorno} - orario giornaliero"]
+    for ora, inizio in enumerate(orari, start=1):
+        slot = griglia.get((giorno, ora))
+        if not slot or (not slot["testo"] and not slot["prof"] and not slot["aule"] and not slot["classi"]):
+            righe.append(f"{ora}. {inizio} - libero / vuoto")
+            continue
+
+        dettagli = []
+        if slot["aule"]:
+            dettagli.append("Aula: " + ", ".join(slot["aule"]))
+        if slot["prof"]:
+            dettagli.append("Prof: " + ", ".join(slot["prof"]))
+        if slot["classi"]:
+            dettagli.append("Classe: " + ", ".join(slot["classi"]))
+
+        righe.append(f"{ora}. {inizio} - " + " | ".join(dettagli))
+
+    return "\n".join(righe)
+
 # =========================
 # HANDLER TELEGRAM
 # =========================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Ciao! Sono il bot dell’orario.\n\n"
+        "Ciao! Sono il bot dell'orario.\n\n"
         "Usa:\n"
         "/oggi 4F\n"
         "/oggi ROSSI\n"
         "/oggi AULA 69\n\n"
-        "Ti rispondo con la lezione dell’ora attuale."
+        "Oppure scrivi: orario 4F (orario giornaliero)\n\n"
+        "Ti rispondo con la lezione dell'ora attuale."
     )
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Comandi:\n"
         "/oggi <classe|prof|aula>\n"
-        "Esempi: /oggi 4F  — /oggi Burgio — /oggi AULA 69\n"
+        "Esempi: /oggi 4F - /oggi Burgio - /oggi AULA 69\n"
+        "Testo libero: orario 4F (orario giornaliero)\n"
     )
 
 async def oggi(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("Scrivi così: /oggi 4F (oppure prof/aula)")
+        await update.message.reply_text("Scrivi cosi: /oggi 4F (oppure prof/aula)")
         return
 
     nome = " ".join(context.args).strip()
 
     giorno = giorno_oggi_sigla()
     if giorno is None:
-        await update.message.reply_text("Oggi è domenica: non c’è orario.")
+        await update.message.reply_text("Oggi e domenica: non c'e orario.")
         return
 
     ora = ora_corrente_numero()
     if ora is None:
-        await update.message.reply_text("Fuori fascia orario lezioni (07:00–13:25).")
+        await update.message.reply_text("Fuori fascia orario lezioni (07:00-13:25).")
         return
 
     try:
@@ -298,10 +332,10 @@ async def oggi(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not url:
             if trovati:
                 await update.message.reply_text(
-                    "Ho trovato più risultati, sii più preciso:\n" + "\n".join(trovati[:30])
+                    "Ho trovato piu risultati, sii piu preciso:\n" + "\n".join(trovati[:30])
                 )
             else:
-                await update.message.reply_text("Non trovato. Scrivi un nome più simile a quello sul sito.")
+                await update.message.reply_text("Non trovato. Scrivi un nome piu simile a quello sul sito.")
             return
 
         orari, griglia = carica_orario(url)
@@ -310,6 +344,7 @@ async def oggi(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         await update.message.reply_text(f"Errore: {e}")
+
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
