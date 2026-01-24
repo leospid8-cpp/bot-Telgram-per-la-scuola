@@ -5,8 +5,6 @@ from urllib.parse import urljoin
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import os
-import io
-from playwright.sync_api import sync_playwright
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
@@ -31,14 +29,6 @@ def scarica_html(url: str) -> BeautifulSoup:
     r = requests.get(url, headers=HEADER, timeout=25)
     r.raise_for_status()
     return BeautifulSoup(r.text, "lxml")
-def render_pagina_png(url: str) -> bytes:
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 720})
-        page.goto(url, wait_until="networkidle", timeout=60000)
-        png_bytes = page.screenshot(full_page=True)
-        browser.close()
-        return png_bytes
 
 def crea_indice():
     pagina = scarica_html(URL_INDICE)
@@ -76,7 +66,6 @@ def categoriaricerca(nome: str, indice: dict) -> str:
         for chiave in indice[categoria]:
             if nome in chiave:
                 return categoria
-            
     return "classe"
 
 def scegli_url(elenco: dict, chiave: str):
@@ -91,7 +80,6 @@ def scegli_url(elenco: dict, chiave: str):
     # su Telegram non facciamo menu interattivo: se ci sono più risultati, li elenchiamo
     return None, trovati
 
-
 async def testo_libero(update: Update, context: ContextTypes.DEFAULT_TYPE):
     testo = (update.message.text or "").strip()
     if not testo:
@@ -101,40 +89,6 @@ async def testo_libero(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(testo) > 60:
         await update.message.reply_text("Scrivi solo classe/prof/aula, es: 4F oppure ROSSI oppure AULA 69.")
         return
-
-    # Se la prima parola è "orario", invia l'immagine settimanale
-    if testo.lower().startswith("orario"):
-        nome = testo[6:].strip()  # tutto dopo "orario"
-        if not nome:
-            await update.message.reply_text("Scrivi: orario <classe|prof|aula>")
-            return
-
-        try:
-            indice = get_indice_cached()
-            categoria = categoriaricerca(nome, indice)
-            res = scegli_url(indice[categoria], nome)
-            if isinstance(res, tuple):
-                url, trovati = res
-            else:
-                url, trovati = res, []
-
-            if not url:
-                if trovati:
-                    await update.message.reply_text(
-                        "Ho trovato più risultati, sii più preciso:\n" + "\n".join(trovati[:30])
-                    )
-                else:
-                    await update.message.reply_text("Non trovato. Scrivi un nome più simile a quello sul sito.")
-                return
-
-            png_bytes = render_pagina_png(url)
-            bio = io.BytesIO(png_bytes)
-            bio.name = "orario.png"
-            await update.message.reply_photo(photo=bio)
-            return
-        except Exception as e:
-            await update.message.reply_text(f"Errore: {e}")
-            return
 
     nome = testo  # qui la "chiave" è direttamente il messaggio
 
@@ -289,6 +243,8 @@ def formatta_slot(orari, griglia, giorno, ora):
         righe.append("Prof: " + ", ".join(slot["prof"]))
     if slot["classi"]:
         righe.append("Classe: " + ", ".join(slot["classi"]))
+    if slot["testo"]:
+        righe.append("Info: " + " | ".join(slot["testo"]))
 
     return "\n".join(righe)
 
