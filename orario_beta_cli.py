@@ -213,13 +213,13 @@ def giorno_oggi_sigla():
 
 def ora_corrente_numero():
     hhmm = datetime.now(TZ).strftime("%H:%M")
-    if "07:00" <= hhmm < "08:45":
+    if "07:00" <= hhmm < "08:50":
         return 1
-    elif "08:45" <= hhmm < "09:40":
+    elif "08:50" <= hhmm < "09:45":
         return 2
-    elif "09:40" <= hhmm < "10:35":
+    elif "09:45" <= hhmm < "10:40":
         return 3
-    elif "10:35" <= hhmm < "11:35":
+    elif "10:40" <= hhmm < "11:35":
         return 4
     elif "11:35" <= hhmm < "12:30":
         return 5
