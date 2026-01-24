@@ -5,6 +5,7 @@ from urllib.parse import urljoin
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import os
+import io
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
@@ -29,6 +30,10 @@ def scarica_html(url: str) -> BeautifulSoup:
     r = requests.get(url, headers=HEADER, timeout=25)
     r.raise_for_status()
     return BeautifulSoup(r.text, "lxml")
+def scarica_bytes(url: str) -> bytes:
+    r = requests.get(url, headers=HEADER, timeout=25)
+    r.raise_for_status()
+    return r.content
 
 def crea_indice():
     pagina = scarica_html(URL_INDICE)
@@ -66,6 +71,7 @@ def categoriaricerca(nome: str, indice: dict) -> str:
         for chiave in indice[categoria]:
             if nome in chiave:
                 return categoria
+            
     return "classe"
 
 def scegli_url(elenco: dict, chiave: str):
@@ -80,6 +86,29 @@ def scegli_url(elenco: dict, chiave: str):
     # su Telegram non facciamo menu interattivo: se ci sono più risultati, li elenchiamo
     return None, trovati
 
+def trova_immagine_orario(url: str) -> str | None:
+    pagina = scarica_html(url)
+    imgs = pagina.find_all("img", src=True)
+    if not imgs:
+        return None
+
+    # preferisci immagini che sembrano un orario
+    def punteggio(img):
+        src = img.get("src", "").lower()
+        alt = (img.get("alt") or "").lower()
+        score = 0
+        if "orario" in src or "orario" in alt:
+            score += 2
+        if "timetable" in src or "timetable" in alt:
+            score += 1
+        if src.endswith((".png", ".jpg", ".jpeg", ".webp")):
+            score += 1
+        return score
+
+    imgs_sorted = sorted(imgs, key=punteggio, reverse=True)
+    best = imgs_sorted[0]
+    return urljoin(url, best["src"])
+
 async def testo_libero(update: Update, context: ContextTypes.DEFAULT_TYPE):
     testo = (update.message.text or "").strip()
     if not testo:
@@ -89,6 +118,45 @@ async def testo_libero(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(testo) > 60:
         await update.message.reply_text("Scrivi solo classe/prof/aula, es: 4F oppure ROSSI oppure AULA 69.")
         return
+
+    # Se la prima parola è "orario", invia l'immagine settimanale
+    if testo.lower().startswith("orario"):
+        nome = testo[6:].strip()  # tutto dopo "orario"
+        if not nome:
+            await update.message.reply_text("Scrivi: orario <classe|prof|aula>")
+            return
+
+        try:
+            indice = get_indice_cached()
+            categoria = categoriaricerca(nome, indice)
+            res = scegli_url(indice[categoria], nome)
+            if isinstance(res, tuple):
+                url, trovati = res
+            else:
+                url, trovati = res, []
+
+            if not url:
+                if trovati:
+                    await update.message.reply_text(
+                        "Ho trovato più risultati, sii più preciso:\n" + "\n".join(trovati[:30])
+                    )
+                else:
+                    await update.message.reply_text("Non trovato. Scrivi un nome più simile a quello sul sito.")
+                return
+
+            img_url = trova_immagine_orario(url)
+            if not img_url:
+                await update.message.reply_text("Immagine orario non trovata in quella pagina.")
+                return
+
+            img_bytes = scarica_bytes(img_url)
+            bio = io.BytesIO(img_bytes)
+            bio.name = "orario.jpg"
+            await update.message.reply_photo(photo=bio)
+            return
+        except Exception as e:
+            await update.message.reply_text(f"Errore: {e}")
+            return
 
     nome = testo  # qui la "chiave" è direttamente il messaggio
 
