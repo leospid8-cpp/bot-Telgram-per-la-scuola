@@ -31,5 +31,5 @@ python orario_beta_cli.py
 Il bot parte in polling e logga su stdout.
 
 ## Note
-- La cache dell'indice dura 6 ore; regola con `secondi_cache` in `orario_bot/config.py` se serve.
+- La cache dell'indice dura 6 ore; regola con `secondi_cache` in `config.py` se serve.
 - In caso di errori lato scraping vengono loggati i dettagli, mentre all'utente arriva un messaggio generico.

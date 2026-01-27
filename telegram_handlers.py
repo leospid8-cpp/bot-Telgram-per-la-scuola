@@ -2,7 +2,7 @@ import logging
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-from .orario import (
+from orario import (
     ServizioOrario,
     formatta_giorno,
     formatta_slot,

@@ -2,9 +2,9 @@ import logging
 
 from telegram.ext import Application
 
-from orario_bot.config import carica_configurazione
-from orario_bot.orario import ServizioOrario
-from orario_bot.telegram_handlers import registra_handler
+from config import carica_configurazione
+from orario import ServizioOrario
+from telegram_handlers import registra_handler
 
 
 # entrypoint del bot
