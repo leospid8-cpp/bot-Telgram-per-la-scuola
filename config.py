@@ -15,13 +15,13 @@ def carica_configurazione() -> Configurazione:
     # legge le variabili d'ambiente richieste e fallisce subito se mancano
     # così l'errore è evidente all'avvio e non durante una richiesta utente
     token = os.getenv("BOT_TOKEN")
-    url_indice = os.getenv("URL_INDICE")
+    url_indice = os.getenv("URL_MANERBIO")
 
     missing = []
     if not token:
         missing.append("BOT_TOKEN")
     if not url_indice:
-        missing.append("URL_INDICE")
+        missing.append("URL_MANERBIO")
 
     if missing:
         joined = ", ".join(missing)
