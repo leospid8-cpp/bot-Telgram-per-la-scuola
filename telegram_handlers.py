@@ -1,4 +1,5 @@
 import logging
+import os
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
@@ -89,10 +90,10 @@ def registra_handler(app: Application, servizio: ServizioOrario) -> None:
     async def testo_libero(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # gestisce input libero: se inizia con la parola orario mostra il giorno intero, altrimenti solo l'ora corrente
         testo = (update.message.text or "").strip()
-        
+
         mappa_url = {
-            "manerbio" : os.getenv("URL_MANERBIO"),
-            "verolanuova" : os.getenv("URL_VEROLANUOVA"),
+            "manerbio": os.getenv("URL_MANERBIO"),
+            "verolanuova": os.getenv("URL_VEROLANUOVA"),
         }
         
         if not testo:
@@ -105,15 +106,16 @@ def registra_handler(app: Application, servizio: ServizioOrario) -> None:
         parole = testo.split()
         solo_oggi = True
 
-        if testo in mappa_url:
-            url = mappa_url[testo]
+        testo_key = testo.lower()
+        if testo_key in mappa_url:
+            url = mappa_url[testo_key]
             if not url:
                 await update.message.reply_text("URL per questa scuola non configurato.")
                 return
             servizio.url_indice = url
-            servizio._cache.ts=None
-            servizio._cache.data=None
-            await update.message.reply_text(f"impostato: {testo}")
+            servizio._cache.ts = None
+            servizio._cache.data = None
+            await update.message.reply_text(f"Impostato: {testo_key}")
             return
         
         if parole and parole[0].lower() == "orario":
