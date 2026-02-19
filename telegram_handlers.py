@@ -21,9 +21,9 @@ def registra_handler(app: Application, servizio: ServizioOrario) -> None:
         await update.message.reply_text(
             "Ciao! Sono il bot dell'orario.\n"
             "Esempio comandi:\n"
-            "Orario 4F\n"
-            "Orario Burgio A\n"
-            "Orario AULA 69\n"
+            "Per la singola ora sull'ora attuale:\n"
+            "4F\nBurgio A\nAULA 69\nPer l'orario:\n"
+            "Orario 4F\nOrario Burgio A\nOrario AULA 69\n"
             "Oppure scrivi: Per passare tra Manerbio e Verolanuova digitare la città.\n"
             "Esempio: Manerbio"
         )
@@ -32,10 +32,11 @@ def registra_handler(app: Application, servizio: ServizioOrario) -> None:
     async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # lista rapida dei comandi disponibili
         await update.message.reply_text(
+            "Ciao! Sono il bot dell'orario.\n"
             "Esempio comandi:\n"
-            "Orario 4F\n"
-            "Orario Burgio A\n"
-            "Orario AULA 69\n"
+            "Per la singola ora sull'ora attuale:\n"
+            "4F\nBurgio A\nAULA 69\nPer l'orario:\n"
+            "Orario 4F\nOrario Burgio A\nOrario AULA 69\n"
             "Oppure scrivi: Per passare tra Manerbio e Verolanuova digitare la città.\n"
             "Esempio: Manerbio"
         )
