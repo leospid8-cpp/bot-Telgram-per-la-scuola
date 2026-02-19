@@ -19,23 +19,25 @@ def registra_handler(app: Application, servizio: ServizioOrario) -> None:
     async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # messaggio di benvenuto con esempi di utilizzo
         await update.message.reply_text(
-            "Ciao! Sono il bot dell'orario.\n\n"
-            "Usa:\n"
-            "/oggi 4F\n"
-            "/oggi ROSSI\n"
-            "/oggi AULA 69\n\n"
-            "Oppure scrivi: orario 4F (orario giornaliero)\n\n"
-            "Ti rispondo con la lezione dell'ora attuale."
+            "Ciao! Sono il bot dell'orario.\n"
+            "Esempio comandi:\n"
+            "/Orario 4F\n"
+            "/Orario Burgio A\n"
+            "/Orario AULA 69\n"
+            "Oppure scrivi: Per passare tra Manerbio e Verolanuova digitare la città.\n"
+            "Esempio: Manerbio"
         )
 
     # elenca i comandi
     async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # lista rapida dei comandi disponibili
         await update.message.reply_text(
-            "Comandi:\n"
-            "/oggi <classe|prof|aula>\n"
-            "Esempi: /oggi 4F - /oggi Burgio - /oggi AULA 69\n"
-            "Testo libero: orario 4F (orario giornaliero)\n"
+            "Esempio comandi:\n"
+            "/Orario 4F\n"
+            "/Orario Burgio A\n"
+            "/Orario AULA 69\n"
+            "Oppure scrivi: Per passare tra Manerbio e Verolanuova digitare la città.\n"
+            "Esempio: Manerbio"
         )
 
     # risponde con la lezione dell'ora corrente
